@@ -268,8 +268,11 @@ def simple_events():
     event = UpdateDataset(
         name_or_uuid=uuid1, name="new_name", display_name="Some Dataset", type="some_type"
     )
-    yield event, req.UpdateDataset(
-        uuid1, name=event.name, type=event.type, display_name=event.display_name
+    yield (
+        event,
+        req.UpdateDataset(
+            uuid1, name=event.name, type=event.type, display_name=event.display_name
+        ),
     )
     yield ClearDataset(uuid1), req.DeleteDatasetData(uuid1)
     yield GetAllScenarios(), req.GetScenarios(project_uuid)
@@ -342,7 +345,6 @@ async def test_remote_upload_dataset_handler(mediator, valid_project_uuid):
 )
 @pytest.mark.asyncio
 async def test_remote_upload_multiple_datasets_handler(mediator, data_dir, valid_project_uuid):
-
     with patch.object(filetransfer, "UploadMultipleResources", new_callable=AsyncMock) as mock:
         await mediator.send(UploadMultipleDatasets(directory=data_dir))
     assert mock.await_args == call(
@@ -430,7 +432,6 @@ async def test_remote_upload_scenario_handler(mediator, valid_project_uuid):
 )
 @pytest.mark.asyncio
 async def test_remote_upload_multiple_scenarios_handler(mediator, data_dir, valid_project_uuid):
-
     with patch.object(filetransfer, "UploadMultipleResources", new_callable=AsyncMock) as mock:
         await mediator.send(UploadMultipleScenarios(directory=data_dir))
     assert mock.await_args == call(

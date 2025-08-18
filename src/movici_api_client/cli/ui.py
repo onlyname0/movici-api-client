@@ -5,7 +5,6 @@ import tabulate
 
 
 def format_anything(obj, fields):
-
     if isinstance(obj, list):
         return format_table(obj, fields)
     if callable(as_dict := getattr(obj, "as_dict", None)):
@@ -36,7 +35,6 @@ def format_object(obj, fields: t.Sequence[str], header=None):
 def format_dict(
     obj, include: t.Sequence[str] = None, exclude: t.Sequence[str] = None, header=None
 ):
-
     if include is not None:
         keys = include
     else:

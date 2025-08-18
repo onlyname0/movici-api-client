@@ -43,7 +43,6 @@ class UploadResource(Task):
         name_or_uuid: t.Optional[str] = None,
         all_resources: t.Optional[t.Sequence[dict]] = None,
     ) -> None:
-
         self.file = file
         self.parent_uuid = parent_uuid
         self.name_or_uuid = name_or_uuid

@@ -107,7 +107,6 @@ class GetSingleProject(DataEngineRequest):
 
 @dataclasses.dataclass
 class CreateProject(DataEngineRequest):
-
     name: str
     display_name: str
 

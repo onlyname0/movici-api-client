@@ -70,7 +70,6 @@ class ConfigController(Controller):
     @command
     @argument("keys", nargs=-1, required=True)
     def unset(self, keys):
-
         config = self.config
         context = assert_context(config)
 
