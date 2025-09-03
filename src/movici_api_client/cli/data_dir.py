@@ -8,9 +8,9 @@ MOVICI_DATADIR_SENTINEL = ".movici_data"
 
 
 class DataDir:
-    datasets: pathlib.Path = None
-    scenarios: pathlib.Path = None
-    views: pathlib.Path = None
+    datasets: t.Optional[pathlib.Path] = None
+    scenarios: t.Optional[pathlib.Path] = None
+    views: t.Optional[pathlib.Path] = None
 
     def __init__(self, path: pathlib.Path) -> None:
         self.path = path
@@ -68,7 +68,7 @@ class MoviciDataDir(DataDir):
         return self.path == other.path
 
     @classmethod
-    def resolve_from_subpath(cls, path: t.Union[str, pathlib.Path]) -> t.Optional[pathlib.Path]:
+    def resolve_from_subpath(cls, path: t.Union[str, pathlib.Path]) -> t.Optional["MoviciDataDir"]:
         path = pathlib.Path(path).resolve()
 
         for _ in range(100):
@@ -169,7 +169,7 @@ class ScenariosDirectory(SimpleDataDirectory):
 class UpdatesDirectory(SimpleDataDirectory):
     extensions = {".json"}
 
-    def iter_updates(self, scenario: str = None):
+    def iter_updates(self, scenario: t.Optional[str] = None):
         pattern = re.compile(r"t(?P<timestamp>\d+)_(?P<iteration>\d+)_(?P<dataset>\w+)")
         for file in self._iter_files():
             if pattern.match(file.stem):
@@ -182,8 +182,8 @@ class UpdatesDirectory(SimpleDataDirectory):
 class ViewsDirectory(SimpleDataDirectory):
     extensions = {".json"}
 
-    def iter_views(self, scenario: str = None):
+    def iter_views(self, scenario: t.Optional[str] = None):
         yield from self._iter_files()
 
     def ensure_views_dir(self, scenario: str):
-        return self._ensure_directory()
+        return self._ensure_directory(self.path)

@@ -10,9 +10,9 @@ from .exceptions import InvalidEditor, InvalidFile, InvalidFileEdit, NoChangeDet
 
 def read_json_file(file: pathlib.Path) -> dict:
     if not file.is_file():
-        raise InvalidFile("not a file")
+        raise InvalidFile("not a file", file)
     try:
-        return json.loads(file.read_text())
+        return json.loads(file.read_text())  # type: ignore[no-any-return]
     except IOError:
         raise InvalidFile("read error", file)
     except json.JSONDecodeError:

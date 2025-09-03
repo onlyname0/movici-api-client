@@ -10,7 +10,7 @@ from movici_api_client.cli.common import CLIParameters
 from ..utils import confirm
 
 
-class Task:
+class FileTransferTask:
     client: IAsyncClient = gimme.attribute(IAsyncClient)
     params: CLIParameters = gimme.attribute(CLIParameters)
 
@@ -24,26 +24,36 @@ class Task:
         return self.run().__await__()
 
 
-class SequentialTaskGroup(Task):
-    def __init__(self, tasks: t.Sequence[Task], progress=False, description=None) -> None:
+class SequentialTaskGroup(FileTransferTask):
+    def __init__(
+        self, tasks: t.Sequence[FileTransferTask], progress=False, description=None
+    ) -> None:
         self.tasks = tasks
         self.progress = progress
         self.description = description
 
     async def run(self) -> t.Optional[bool]:
-        tasks = tqdm(self.tasks, desc=self.description) if self.progress else self.tasks
-        for task in tasks:
-            result = await task.run()
+        result: t.Optional[bool] = None
+        if self.progress:
+            tasks = tqdm(self.tasks, desc=self.description)
+            for task in tasks:
+                result = await task.run()
+                if result is False:
+                    break
             if result is False:
-                break
-
-        if self.progress and result is False:
-            tasks.reset()
+                tasks.reset()
+        else:
+            for task in self.tasks:
+                result = await task.run()
+                if result is False:
+                    break
         return result
 
 
-class ParallelTaskGroup(Task):
-    def __init__(self, tasks: t.Iterable[Task], progress=False, description=None) -> None:
+class ParallelTaskGroup(FileTransferTask):
+    def __init__(
+        self, tasks: t.Iterable[FileTransferTask], progress=False, description=None
+    ) -> None:
         self.tasks = tasks
         self.progress = progress
         self.description = description
@@ -62,6 +72,7 @@ class ParallelTaskGroup(Task):
                 if not task.done():
                     task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+        return None
 
 
 def resolve_question_flag(flag, confirm_message):

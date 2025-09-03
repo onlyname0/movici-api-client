@@ -1,4 +1,5 @@
 import dataclasses
+import typing as t
 from collections import deque
 from unittest.mock import AsyncMock, Mock
 
@@ -9,8 +10,8 @@ class FakeClient(Client):
     mock_cls = Mock
 
     def __init__(self, *args, **kwargs) -> None:
-        self.responses = deque()
-        self.request = self.mock_cls(side_effect=self._request)
+        self.responses: deque = deque()
+        self.request = self.mock_cls(side_effect=self._request)  # type: ignore[method-assign]
 
     def _request(self, req, on_error=None):
         response = self.next_response()
@@ -35,7 +36,7 @@ class FakeClient(Client):
             return None
 
 
-class FakeAsyncClient(FakeClient, AsyncClient):
+class FakeAsyncClient(FakeClient, AsyncClient):  # type: ignore[misc]
     mock_cls = AsyncMock
 
     async def __aenter__(self):
@@ -47,5 +48,5 @@ class FakeAsyncClient(FakeClient, AsyncClient):
 
 @dataclasses.dataclass
 class FakeResponse:
-    data: dict = None
+    data: t.Optional[dict] = None
     status_code: int = 200

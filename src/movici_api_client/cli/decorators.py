@@ -187,7 +187,7 @@ def data_directory_option(purpose):
     )
 
 
-def combine_decorators(decorators: t.Iterable[callable]):
+def combine_decorators(decorators: t.Iterable[t.Callable]):
     def decorator(func):
         return functools.reduce(
             lambda f, decorator: decorator(f),

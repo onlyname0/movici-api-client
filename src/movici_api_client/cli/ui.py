@@ -34,15 +34,18 @@ def format_object(obj, fields: t.Sequence[str], header=None):
 
 
 def format_dict(
-    obj, include: t.Sequence[str] = None, exclude: t.Sequence[str] = None, header=None
+    obj,
+    include: t.Optional[t.Sequence[str]] = None,
+    exclude: t.Optional[t.Sequence[str]] = None,
+    header=None,
 ):
 
     if include is not None:
-        keys = include
+        keys = list(include)
     else:
-        keys = set(obj)
+        keys = list(obj.keys())
         if exclude is not None:
-            keys -= set(exclude)
+            keys = [k for k in keys if k not in exclude]
     return format_object(obj, keys, header=header)
 
 

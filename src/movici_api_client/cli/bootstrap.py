@@ -1,5 +1,6 @@
 import functools
 import sys
+import typing as t
 
 import click
 
@@ -25,7 +26,9 @@ def register_controller(group: click.Group, controller: Controller):
         register_controller_reversed(group, controller)
 
     for name, func in iter_commands(controller):
-        command_name = get_options(func, OPTIONS_COMMAND).get("name") or name
+        opts = get_options(func, OPTIONS_COMMAND)
+        command_name = opts.get("name") if opts is not None else None
+        command_name = command_name or name
         func = functools.reduce(lambda f, dec: dec(f), controller.decorators, func)
         register_command_in_subgroup(
             group,
@@ -38,14 +41,15 @@ def register_controller(group: click.Group, controller: Controller):
 def register_controller_reversed(group: click.Group, controller: Controller):
     for group_name, func in iter_commands(controller):
         opts = get_options(func, OPTIONS_COMMAND)
-        command_name = opts.get("name") or controller.name
+        command_name = opts.get("name") if opts is not None else None
+        command_name = command_name or controller.name
         func = functools.reduce(lambda f, dec: dec(f), controller.decorators, func)
 
         register_command_in_subgroup(group, group_name, func, command_name)
 
 
 def register_command_in_subgroup(
-    group: click.Group, subgroup_name, command: callable, command_name=None
+    group: click.Group, subgroup_name, command: t.Callable, command_name=None
 ):
     if subgroup := group.commands.get(subgroup_name):
         if not isinstance(subgroup, click.Group):
@@ -61,7 +65,9 @@ def register_command_in_subgroup(
 
 
 def register_command(group: click.Group, command, name=None):
-    name = name or get_options(command, OPTIONS_COMMAND).get("name")
+    if name is None:
+        opts = get_options(command, OPTIONS_COMMAND)
+        name = opts.get("name") if opts is not None else None
     command = catch_exceptions(command)
     command = create_click_command(command)
     group.add_command(command, name)

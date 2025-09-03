@@ -1,10 +1,11 @@
 import dataclasses
 import pathlib
+from typing import Optional
 
 
 @dataclasses.dataclass
 class MoviciCLIError(Exception):
-    template: str = dataclasses.field(init=False, default=None)
+    template: Optional[str] = dataclasses.field(init=False, default=None)
 
     def __str__(self) -> str:
         if self.template is None:

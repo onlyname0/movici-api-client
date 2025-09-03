@@ -23,10 +23,10 @@ from movici_api_client.cli.data_dir import DataDir
 
 from ..exceptions import InvalidFile
 from ..utils import echo
-from .common import ParallelTaskGroup, Task, resolve_question_flag
+from .common import FileTransferTask, ParallelTaskGroup, resolve_question_flag
 
 
-class DownloadResource(Task):
+class DownloadResource(FileTransferTask):
     EXTENSIONS = {
         "application/json": ".json",
         "application/msgpack": ".msgpack",
@@ -86,7 +86,7 @@ class DownloadResource(Task):
         return 0
 
 
-class RecursivelyDownloadResource(Task):
+class RecursivelyDownloadResource(FileTransferTask):
     def __init__(
         self,
         parent: dict,
@@ -109,7 +109,7 @@ class RecursivelyDownloadResource(Task):
     def request_all(self):
         raise NotImplementedError
 
-    def create_subtasks(self, resources: t.List[dict]) -> t.Iterable[Task]:
+    def create_subtasks(self, resources: t.List[dict]) -> t.Iterable[FileTransferTask]:
         raise NotImplementedError
 
 
@@ -117,67 +117,79 @@ class DownloadDatasets(RecursivelyDownloadResource):
     def request_all(self):
         return GetDatasets(self.parent["uuid"])
 
-    def create_subtasks(self, resources: t.List[dict]) -> t.Iterable[t.Iterable[Task]]:
-        yield from (
-            DownloadResource(
-                file=self.directory.datasets.joinpath(ds["name"]),
-                request=GetDatasetData(ds["uuid"]),
-                progress=self.progress,
-                continue_after_failed_overwrite=True,
-            )
-            for ds in resources
-            if ds["has_data"]
-        )
+    def create_subtasks(self, resources: t.List[dict]) -> t.Iterable[t.Iterable[FileTransferTask]]:
+        if self.directory.datasets is None:
+            raise RuntimeError("Directory datasets path is not set")
+        for ds in resources:
+            if ds["has_data"]:
+                yield [
+                    DownloadResource(
+                        file=self.directory.datasets.joinpath(ds["name"]),
+                        request=GetDatasetData(ds["uuid"]),
+                        progress=self.progress,
+                        continue_after_failed_overwrite=True,
+                    )
+                ]
 
 
 class DownloadScenarios(RecursivelyDownloadResource):
     def request_all(self):
         return GetScenarios(self.parent["uuid"])
 
-    def create_subtasks(self, resources: t.List[dict]) -> t.Iterable[t.Iterable[Task]]:
-        yield ParallelTaskGroup(
-            (DownloadSingleScenario(parent=r, directory=self.directory) for r in resources),
-            progress=False,
-            description="Downloading scenarios",
-        )
+    def create_subtasks(self, resources: t.List[dict]) -> t.Iterable[t.Iterable[FileTransferTask]]:
+        yield [
+            ParallelTaskGroup(
+                (DownloadSingleScenario(parent=r, directory=self.directory) for r in resources),
+                progress=False,
+                description="Downloading scenarios",
+            )
+        ]
 
 
 class DownloadSingleScenario(RecursivelyDownloadResource):
     def request_all(self):
         return GetUpdates(self.parent["uuid"])
 
-    def create_subtasks(self, resources: t.List[dict]) -> t.Iterable[t.Iterable[Task]]:
+    def create_subtasks(self, resources: t.List[dict]) -> t.Iterable[t.Iterable[FileTransferTask]]:
+        if self.directory.scenarios is None:
+            raise RuntimeError("Directory scenarios path is not set")
         name, uuid = self.parent["name"], self.parent["uuid"]
-        yield DownloadResource(
-            file=self.directory.scenarios.joinpath(name),
-            request=GetSingleScenario(uuid),
-            progress=False,
-        )
+        yield [
+            DownloadResource(
+                file=self.directory.scenarios.joinpath(name),
+                request=GetSingleScenario(uuid),
+                progress=False,
+            )
+        ]
         if self.params.with_simulation:
             simulation_dir = self.directory.ensure_simulation_dir(name)
-            yield PrepareOverwriteDirectory(simulation_dir)
-            yield ParallelTaskGroup(
-                (
-                    DownloadResource(
-                        file=simulation_dir.joinpath(
-                            f"t{r['timestamp']}_{r['iteration']}_{r['name']}"
-                        ),
-                        request=GetSingleUpdate(r["uuid"]),
-                        progress=False,
-                    )
-                    for r in resources
-                ),
-                progress=self.progress,
-                description=name,
-            )
+            yield [PrepareOverwriteDirectory(simulation_dir)]
+            yield [
+                ParallelTaskGroup(
+                    (
+                        DownloadResource(
+                            file=simulation_dir.joinpath(
+                                f"t{r['timestamp']}_{r['iteration']}_{r['name']}"
+                            ),
+                            request=GetSingleUpdate(r["uuid"]),
+                            progress=False,
+                        )
+                        for r in resources
+                    ),
+                    progress=self.progress,
+                    description=name,
+                )
+            ]
         if self.params.with_views:
-            yield DownloadViews(
-                scenario=self.parent,
-                directory=self.directory,
-            )
+            yield [
+                DownloadViews(
+                    scenario=self.parent,
+                    directory=self.directory,
+                )
+            ]
 
 
-class DownloadViews(Task):
+class DownloadViews(FileTransferTask):
     def __init__(
         self,
         scenario: dict,
@@ -190,8 +202,10 @@ class DownloadViews(Task):
         async with self.client:
             views = await self.client.request(GetViews(self.scenario["uuid"]))
         directory = self.directory.ensure_views_dir(self.scenario["name"])
-        for view in views:
-            self.store_view(view, directory=directory)
+        if views:
+            for view in views:
+                self.store_view(view, directory=directory)
+        return None
 
     def store_view(self, view: dict, directory: pathlib.Path):
         name = view["name"]
@@ -205,20 +219,24 @@ class DownloadProject(RecursivelyDownloadResource):
     def request_all(self):
         return GetProjects()
 
-    def create_subtasks(self, resources: t.List[dict]) -> t.Iterable[Task]:
-        yield DownloadDatasets(
-            parent=self.parent,
-            directory=self.directory,
-            progress=self.progress,
-        )
-        yield DownloadScenarios(
-            self.parent,
-            directory=self.directory,
-            progress=False,
-        )
+    def create_subtasks(self, resources: t.List[dict]) -> t.Iterable[t.Iterable[FileTransferTask]]:
+        yield [
+            DownloadDatasets(
+                parent=self.parent,
+                directory=self.directory,
+                progress=self.progress,
+            )
+        ]
+        yield [
+            DownloadScenarios(
+                self.parent,
+                directory=self.directory,
+                progress=False,
+            )
+        ]
 
 
-class PrepareOverwriteDirectory(Task):
+class PrepareOverwriteDirectory(FileTransferTask):
     def __init__(self, directory: pathlib.Path):
         self.directory = directory
 

@@ -31,10 +31,10 @@ from movici_api_client.cli.data_dir import DataDir, MoviciDataDir, ScenariosDire
 from ..exceptions import InvalidFile, InvalidResource
 from ..helpers import read_json_file
 from ..utils import echo, prompt_choices_async, validate_uuid
-from .common import ParallelTaskGroup, Task, resolve_question_flag
+from .common import FileTransferTask, ParallelTaskGroup, resolve_question_flag
 
 
-class UploadResource(Task):
+class UploadResource(FileTransferTask):
     def __init__(
         self,
         file: pathlib.Path,
@@ -56,33 +56,41 @@ class UploadResource(Task):
 
             if not existing:
                 if self.determine_create_new(self.params.create, name):
-                    return await self.strategy.create_new(
+                    return await self.strategy.create_new(  # type: ignore[no-any-return]
                         self.parent_uuid,
                         file=self.file,
                         name=name,
                         inspect=self.params.inspect,
                     )
 
-            if self.strategy.require_overwrite_question(existing) and not self.determine_overwrite(
-                self.params.overwrite, name
+            if (
+                existing
+                and self.strategy.require_overwrite_question(existing)
+                and not self.determine_overwrite(self.params.overwrite, name)
             ):
-                return
+                return None
 
-            return await self.strategy.update_existing(existing, self.file, self.params.inspect)
+            if existing:
+                return await self.strategy.update_existing(  # type: ignore[no-any-return]
+                    existing, self.file, self.params.inspect
+                )
+
+            return None
 
     async def ensure_all_resources(self):
         if self.all_resources is None:
             self.all_resources = await self.strategy.get_all(self.parent_uuid)
 
-    async def get_existing(self) -> t.Optional[dict]:
+    async def get_existing(self) -> t.Tuple[str, t.Optional[dict]]:
         await self.ensure_all_resources()
         name_or_uuid, all_resources = self.name_or_uuid, self.all_resources
         if not name_or_uuid:
             name_or_uuid = self.file.stem
         match_field = "uuid" if validate_uuid(name_or_uuid) else "name"
-        for res in all_resources:
-            if name_or_uuid == res[match_field]:
-                return res["name"], res
+        if all_resources:
+            for res in all_resources:
+                if name_or_uuid == res[match_field]:
+                    return res["name"], res
         if match_field == "uuid":
             InvalidResource("scenario", name_or_uuid)
         return name_or_uuid, None
@@ -115,41 +123,50 @@ class UploadResource(Task):
         return do_overwrite
 
 
-class UploadMultipleResources(Task):
+class UploadMultipleResources(FileTransferTask):
     def __init__(
         self,
         directory: DataDir,
         parent_uuid: str,
-        strategy: UploadStrategy = None,
+        strategy: t.Optional[UploadStrategy] = None,
     ):
         self.directory = directory
         self.parent_uuid = parent_uuid
         self.strategy = strategy
 
     async def run(self) -> t.Optional[bool]:
-        all_resources = await self.strategy.get_all(self.parent_uuid)
+        if self.strategy is None:
+            return None
+        if hasattr(self.strategy, "get_all"):
+            try:
+                all_resources = await self.strategy.get_all(
+                    self.parent_uuid
+                )  # type: ignore[call-arg]
+            except TypeError:
+                # Some strategies don't take parent_uuid parameter
+                all_resources = await self.strategy.get_all()  # type: ignore[call-arg]
+        else:
+            all_resources = None
         async with self.client:
             for file in tqdm(
                 list(self.strategy.iter_files(self.directory)),
                 desc=f"Processing {self.strategy.resource_type} files",
             ):
-                task = self.strategy.upload_task(
-                    file=file,
-                    parent_uuid=self.parent_uuid,
-                    all_resources=all_resources,
-                    strategy=self.strategy,
+                task = self.strategy.upload_task(  # type: ignore[call-arg]
+                    file, self.parent_uuid, strategy=self.strategy, all_resources=all_resources
                 )
                 await task.run()
+        return None
 
 
-class UploadScenario(Task):
+class UploadScenario(FileTransferTask):
     def __init__(
         self,
         file: pathlib.Path,
         parent_uuid: str,
         name_or_uuid=None,
         all_resources=None,
-        strategy: UploadStrategy = None,
+        strategy: t.Optional[UploadStrategy] = None,
     ):
         self.file = file
         self.parent_uuid = parent_uuid
@@ -166,11 +183,12 @@ class UploadScenario(Task):
             all_resources=self.all_resources,
         ).run()
         if uuid is None:
-            return
+            return None
         if self.params.with_simulation:
             await self.upload_simulation(uuid)
         if self.params.with_views:
             await self.upload_views(uuid)
+        return None
 
     async def upload_simulation(self, uuid):
         scenario_dir = ScenariosDirectory(self.file.parent)
@@ -199,7 +217,7 @@ class UploadScenario(Task):
         ).run()
 
 
-class UploadTimeline(Task):
+class UploadTimeline(FileTransferTask):
     extensions = {".json"}
 
     def __init__(
@@ -207,7 +225,7 @@ class UploadTimeline(Task):
         client: IAsyncClient,
         directory: DataDir,
         parent_uuid: str,
-        scenario: dict = None,
+        scenario: t.Optional[dict] = None,
     ):
         self.client = client
         self.directory = directory
@@ -217,6 +235,8 @@ class UploadTimeline(Task):
     async def run(self) -> t.Optional[bool]:
         async with self.client:
             scenario = await self.ensure_scenario()
+            if scenario is None:
+                return None
             await self.recreate_timeline(scenario)
             await ParallelTaskGroup(
                 (
@@ -224,8 +244,9 @@ class UploadTimeline(Task):
                     for file in self.directory.iter_updates(scenario["name"])
                 ),
                 progress=True,
-                description=self.scenario["name"],
+                description=scenario["name"],
             ).run()
+        return None
 
     async def recreate_timeline(self, scenario: dict):
         if scenario.get("has_timeline"):
@@ -239,7 +260,7 @@ class UploadTimeline(Task):
         return self.scenario
 
 
-class UploadUpdate(Task):
+class UploadUpdate(FileTransferTask):
     def __init__(self, parent_uuid: str, file: pathlib.Path) -> None:
         self.parent_uuid = parent_uuid
         self.file = file
@@ -249,8 +270,11 @@ class UploadUpdate(Task):
             payload = self.prepare_payload()
         except ValueError as e:
             echo(f"Error reading {self.file}: {e!s}", err=True)
-            return
+            return None
+        if payload is None:
+            return None
         await self.client.request(CreateUpdate(self.parent_uuid, payload))
+        return None
 
     def prepare_payload(self) -> t.Optional[dict]:
         try:
@@ -274,7 +298,7 @@ class UploadUpdate(Task):
         return contents
 
 
-class UploadProject(Task):
+class UploadProject(FileTransferTask):
     def __init__(
         self,
         directory: DataDir,
@@ -293,13 +317,14 @@ class UploadProject(Task):
                 parent_uuid=self.uuid,
                 strategy=strategy,
             ).run()
+        return None
 
 
 class UploadStrategy:
     extensions: t.Optional[t.Collection]
     messages: dict
     resource_type: str = "resource"
-    upload_task: t.Type[Task] = UploadResource
+    upload_task: t.Type[FileTransferTask] = UploadResource
 
     def __init__(self, client: IAsyncClient):
         self.client = client
@@ -343,11 +368,12 @@ class DatasetUploadStrategy(UploadStrategy):
         name = name or file.stem
         await self.ensure_all_dataset_types()
         dataset_type = await self.infer_dataset_type(file, inspect=inspect)
-        uuid = (
-            await self.client.request(
-                CreateDataset(parent_uuid, name, type=dataset_type, display_name=name)
-            )
-        )["dataset_uuid"]
+        response = await self.client.request(
+            CreateDataset(parent_uuid, name, type=dataset_type, display_name=name)
+        )
+        if response is None:
+            raise RuntimeError("Failed to create dataset: received None response")
+        uuid = response["dataset_uuid"]
         await self.upload_new_data(uuid, file)
         return uuid
 
@@ -406,7 +432,10 @@ class ScenarioUploadStrategy(UploadStrategy):
 
     async def create_new(self, parent_uuid: str, file: pathlib.Path, name=None, inspect=False):
         payload = self._prepare_payload(name or file.stem, file, inspect)
-        return (await self.client.request(CreateScenario(parent_uuid, payload)))["scenario_uuid"]
+        response = await self.client.request(CreateScenario(parent_uuid, payload))
+        if response is None:
+            raise RuntimeError("Failed to create scenario: received None response")
+        return response["scenario_uuid"]
 
     async def update_existing(self, existing: dict, file: pathlib.Path, name=None, inspect=False):
         payload = self._prepare_payload(name or file.stem, file, inspect)
@@ -424,7 +453,7 @@ class ViewUploadStrategy(UploadStrategy):
     resource_type = "view"
     extensions = {".json"}
 
-    def __init__(self, client: IAsyncClient, scenario: str = None):
+    def __init__(self, client: IAsyncClient, scenario: t.Optional[str] = None):
         super().__init__(client)
         self.scenario = scenario
 
@@ -440,7 +469,10 @@ class ViewUploadStrategy(UploadStrategy):
 
     async def create_new(self, parent_uuid: str, file: pathlib.Path, name=None, inspect=False):
         payload = self._prepare_payload(name or file.stem, file, inspect)
-        return (await self.client.request(CreateView(parent_uuid, payload)))["view_uuid"]
+        response = await self.client.request(CreateView(parent_uuid, payload))
+        if response is None:
+            raise RuntimeError("Failed to create view: received None response")
+        return response["view_uuid"]
 
     async def update_existing(self, existing: dict, file: pathlib.Path, name=None, inspect=False):
         payload = self._prepare_payload(name or file.stem, file, inspect)

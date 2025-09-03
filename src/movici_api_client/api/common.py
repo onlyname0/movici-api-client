@@ -5,6 +5,7 @@ import functools
 import logging
 import typing as t
 from functools import reduce
+from typing import Literal
 from urllib.parse import urljoin as urljoin_
 
 from httpx import Response
@@ -77,14 +78,20 @@ class IAsyncClient:
     async def stream(self, req: BaseRequest[T], on_error: t.Optional[ErrorCallback] = None):
         raise NotImplementedError
 
+    async def __aenter__(self):
+        raise NotImplementedError
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        raise NotImplementedError
+
 
 class BaseClient:
-    auth: t.Optional[Auth]
+    auth: t.Union[Auth, None, Literal[False]]
 
     def __init__(
         self,
         base_url: str,
-        auth: t.Union[Auth, None, False] = None,
+        auth: t.Union[Auth, None, Literal[False]] = None,
         logger: t.Optional[logging.Logger] = None,
         on_error: t.Optional[ErrorCallback] = None,
         service_urls: t.Optional[t.Dict[Service, str]] = None,
@@ -118,7 +125,7 @@ class BaseClient:
                 service_url = self.service_urls[service]
             except KeyError:
                 raise MoviciServiceUnavailable()
-        return urljoin(self.base_url, service_url)
+        return urljoin(self.base_url, service_url)  # type: ignore[no-any-return]
 
     def _assert_auth(self, request: BaseRequest[T]):
         if request.auth:
@@ -150,7 +157,7 @@ class BaseRequest(t.Generic[T]):
         raise NotImplementedError
 
     def make_response(self, resp: Response) -> T:
-        return resp.json()
+        return resp.json()  # type: ignore[no-any-return]
 
 
 class Request(BaseRequest):
@@ -179,10 +186,10 @@ def unwrap_envelope(envelope):
         original = cls.make_response
 
         def make_response(self, resp: Response):
-            result = original(self, resp)
+            result = original(self, resp)  # type: ignore[call-arg]
             return result[envelope]
 
-        cls.make_response = make_response
+        cls.make_response = make_response  # type: ignore[method-assign, assignment]
         return cls
 
     return decorator

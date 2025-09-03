@@ -1,11 +1,14 @@
 import asyncio
 import json
 import pathlib
+import typing as t
+
+import gimme
 
 from movici_api_client.api.client import AsyncClient, Client
 from movici_api_client.api.requests import DeleteView, GetSingleView, GetViews, UpdateView
 
-from ..common import Controller
+from ..common import CLIParameters, Controller
 from ..data_dir import DataDir
 from ..decorators import (
     argument,
@@ -117,16 +120,19 @@ class ViewController(Controller):
         client = AsyncClient.from_sync_client(get(Client))
         view_name_or_uuid = view_name_or_uuid or file.stem
         scenario_uuid = get_scenario_uuid(scenario_name_or_uuid, project_uuid, client)
+
+        # Set parameters in CLIParameters
+        params = gimme.that(CLIParameters)
+        params.overwrite = maybe_set_flag(overwrite, yes, no)
+        params.create = maybe_set_flag(create, yes, no)
+        params.inspect = True
+
         asyncio.run(
             UploadResource(
-                client,
                 file,
                 parent_uuid=scenario_uuid,
                 strategy=ViewUploadStrategy(client=client),
                 name_or_uuid=view_name_or_uuid,
-                overwrite=maybe_set_flag(overwrite, yes, no),
-                create_new=maybe_set_flag(create, yes, no),
-                inspect_file=True,
             ).run()
         )
 
@@ -151,15 +157,18 @@ class ViewController(Controller):
         scenario = get_scenario(scenario_name_or_uuid, project_uuid, client)
         client = AsyncClient.from_sync_client(get(Client))
         strategy = ViewUploadStrategy(client=client, scenario=scenario)
+
+        # Set parameters in CLIParameters
+        params = gimme.that(CLIParameters)
+        params.overwrite = maybe_set_flag(overwrite, yes, no)
+        params.create = maybe_set_flag(create, yes, no)
+        params.inspect = True
+
         asyncio.run(
             UploadMultipleResources(
-                client,
                 directory,
                 parent_uuid=scenario["uuid"],
                 strategy=strategy,
-                overwrite=maybe_set_flag(overwrite, yes, no),
-                create_new=maybe_set_flag(create, yes, no),
-                inspect_file=True,
             ).run()
         )
         echo("Success!")
@@ -229,7 +238,9 @@ class ViewController(Controller):
         echo("Succesfully updated view")
 
 
-def get_view(project_uuid, scenario_name_or_uuid, view_name_or_uuid, client: Client = None):
+def get_view(
+    project_uuid, scenario_name_or_uuid, view_name_or_uuid, client: t.Optional[Client] = None
+):
     client = client or get(Client)
 
     if validate_uuid(view_name_or_uuid):

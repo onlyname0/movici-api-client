@@ -21,7 +21,7 @@ def get_config_path(env=CONFIG_LOCATION_ENV, default=DEFAULT_CONFIG_LOCATION):
     return pathlib.Path(os.getenv(env, default=default)).expanduser()
 
 
-def get_config(file: pathlib.Path = None):
+def get_config(file: t.Optional[pathlib.Path] = None):
     file = pathlib.Path(file) if file is not None else get_config_path()
     try:
         if not file.is_file():
@@ -46,10 +46,10 @@ def initialize_config(file: pathlib.Path):
 
 
 def read_config(file: pathlib.Path) -> Config:
-    return Config.from_dict(json.loads(file.read_text()))
+    return Config.from_dict(json.loads(file.read_text()))  # type: ignore[no-any-return]
 
 
-def write_config(config: Config = None, file: t.Optional[pathlib.Path] = None):
+def write_config(config: t.Optional[Config] = None, file: t.Optional[pathlib.Path] = None):
     config = config or gimme.that(Config)
     file = pathlib.Path(file) if file is not None else get_config_path()
     file.write_text(json.dumps(config.as_dict(), indent=2))
@@ -75,17 +75,20 @@ class Config:
         for context in self.contexts:
             if context.name == name:
                 return context
+        return None
 
     def add_context(self, context: Context):
         if self.get_context(context.name) is not None:
-            raise DuplicateContext({context.name})
+            raise DuplicateContext(context.name)
         self.contexts.append(context)
 
     def remove_context(self, item: t.Union[str, Context]):
         try:
             if isinstance(item, str):
                 name = item
-                self.contexts.remove(self.get_context(name))
+                context = self.get_context(name)
+                if context is not None:
+                    self.contexts.remove(context)
             else:
                 name = item.name
                 self.contexts.remove(item)
@@ -98,9 +101,9 @@ class Config:
     def as_dict(self):
         return {
             "version": self.version,
-            "current_context": self.current_context.name
-            if self.current_context is not None
-            else None,
+            "current_context": (
+                self.current_context.name if self.current_context is not None else None
+            ),
             "contexts": [context.as_dict() for context in self.contexts],
         }
 
@@ -136,7 +139,7 @@ _MISSING = object()
 
 @dataclasses.dataclass
 class SpecialKey:
-    parse: t.Optional[callable] = None
+    parse: t.Optional[t.Callable] = None
     default: t.Any = _MISSING
     required: bool = False
 

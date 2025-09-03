@@ -59,7 +59,7 @@ class TestMediator:
     async def test_injects_dependencies(self, gimme_repo):
         class MyService:
             def __init__(self) -> None:
-                self.events = []
+                self.events: list[str] = []
 
         service = MyService()
         gimme_repo.add(service)

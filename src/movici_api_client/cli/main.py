@@ -1,5 +1,6 @@
 import pathlib
 from json import JSONDecodeError
+from typing import Literal, Union
 
 import gimme
 import httpx
@@ -38,8 +39,10 @@ def setup_client(config: Config):
     context = config.current_context
 
     if context is None:
-        return Client()
-    auth = MoviciTokenAuth(auth_token=context.get("auth_token")) if context.get("auth") else False
+        return Client(base_url="")
+    auth: Union[MoviciTokenAuth, Literal[False]] = (
+        MoviciTokenAuth(auth_token=context.get("auth_token")) if context.get("auth") else False
+    )
     return Client(
         base_url=context.url,
         auth=auth,

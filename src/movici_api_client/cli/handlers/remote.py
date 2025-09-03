@@ -60,7 +60,7 @@ def requires_valid_project_uuid(cls: t.Type[EventHandler]):
         self.project_uuid = project_uuid
         return await original(self, event, mediator)
 
-    cls.handle = handle
+    cls.handle = handle  # type: ignore[method-assign]
     return cls
 
 
@@ -302,6 +302,8 @@ class RemoteDownloadDatasetHandler(RemoteEventHandler):
 
     async def handle(self, event: DownloadDataset, mediator: Mediator):
         dataset = await DatasetQuery(self.project_uuid).by_name_or_uuid(event.name_or_uuid)
+        if event.directory.datasets is None:
+            raise RuntimeError("Directory datasets path is not set")
         file = event.directory.datasets.joinpath(dataset["name"])
         return await ft.DownloadResource(
             file=file,

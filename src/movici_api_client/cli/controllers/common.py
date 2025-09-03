@@ -47,7 +47,7 @@ def resolve_data_directory(
         return data_dir
 
     if path is not None:
-        path = path.resolve()
+        path = pathlib.Path(path).resolve()
         return {
             "datasets": DatasetsDirectory,
             "scenarios": ScenariosDirectory,

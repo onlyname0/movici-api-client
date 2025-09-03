@@ -2,10 +2,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from movici_api_client.cli.filetransfer.common import ParallelTaskGroup, SequentialTaskGroup, Task
+from movici_api_client.cli.filetransfer.common import (
+    FileTransferTask,
+    ParallelTaskGroup,
+    SequentialTaskGroup,
+)
 
 
-class FakeTask(Task, AsyncMock):
+class FakeTask(FileTransferTask, AsyncMock):
     async def run(self):
         await self()
 

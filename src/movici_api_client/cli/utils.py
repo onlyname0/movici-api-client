@@ -77,6 +77,8 @@ def assert_project_uuid(project: str):
 def get_resource_uuids(request: Request):
     client = dependencies.get(Client)
     all_resources = client.request(request)
+    if all_resources is None:
+        return {}
     return {p["name"]: p["uuid"] for p in all_resources}
 
 
@@ -117,7 +119,8 @@ def iter_commands(obj: Controller):
     for key in obj.__commands__:
         val = getattr(obj, key)
         opts = get_options(val, OPTIONS_COMMAND)
-        group_name = opts.get("group_name") or key
+        group_name = opts.get("group_name") if opts is not None else None
+        group_name = group_name or key
         yield (group_name, val)
 
 
@@ -160,7 +163,7 @@ def maybe_set_flag(flag: bool, default_yes: bool, default_no: bool) -> t.Optiona
     if flag:
         return flag
 
-    default = default_yes or not default_no
+    default: t.Optional[bool] = default_yes or not default_no
     if not default_yes and not default_no:
         default = None
 

@@ -4,6 +4,7 @@ import contextlib
 import logging
 import typing as t
 from asyncio import Semaphore
+from typing import Literal
 
 import httpx
 from httpx import HTTPError, HTTPStatusError, Response, Timeout  # noqa
@@ -27,7 +28,7 @@ class Client(BaseClient, ISyncClient):
     def __init__(
         self,
         base_url: str,
-        auth: t.Union[Auth, None, False] = None,
+        auth: t.Union[Auth, None, Literal[False]] = None,
         client: t.Optional[httpx.Client] = None,
         logger: t.Optional[logging.Logger] = None,
         on_error: t.Optional[ErrorCallback] = None,
@@ -60,7 +61,7 @@ class AsyncClient(BaseClient, IAsyncClient):
     def __init__(
         self,
         base_url: str,
-        auth: t.Union[Auth, None, False] = None,
+        auth: t.Union[Auth, None, Literal[False]] = None,
         client_factory: t.Type[httpx.AsyncClient] = httpx.AsyncClient,
         logger: t.Optional[logging.Logger] = None,
         on_error: t.Optional[ErrorCallback] = None,
@@ -80,6 +81,7 @@ class AsyncClient(BaseClient, IAsyncClient):
             self._ensure_client()
             self._assert_auth(req)
             conf = self._prepare_request_config(req)
+            assert self.client is not None
             resp = await self.client.request(**conf)
 
             self._handle_failure(resp, on_error)
@@ -90,6 +92,7 @@ class AsyncClient(BaseClient, IAsyncClient):
         async with self.concurrent_requests:
             self._ensure_client()
             conf = self._prepare_request_config(req)
+            assert self.client is not None
             async with self.client.stream(**conf) as resp:
                 self._handle_failure(resp, on_error)
                 yield resp

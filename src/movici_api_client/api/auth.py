@@ -1,6 +1,6 @@
 import typing as t
 
-from .common import Auth, BaseClient
+from .common import Auth, ISyncClient
 from .requests import Login
 
 
@@ -25,6 +25,7 @@ class MoviciLoginAuth(MoviciTokenAuth):
         self.username = username
         self.password = password
 
-    def login(self, api: BaseClient):
+    def login(self, api: ISyncClient):
         resp = api.request(Login(self.username, self.password))
-        self.auth_token = resp["session"]
+        if resp is not None:
+            self.auth_token = resp["session"]

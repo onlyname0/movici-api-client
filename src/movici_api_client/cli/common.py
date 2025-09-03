@@ -20,7 +20,7 @@ def set_options(obj, key: str, options: dict):
 
 
 def get_options(obj, key: str) -> t.Optional[dict]:
-    return getattr(obj, __MOVICI_CLI_OPTIONS__, {}).get(key, None)
+    return getattr(obj, __MOVICI_CLI_OPTIONS__, {}).get(key, None)  # type: ignore[no-any-return]
 
 
 def has_options(obj, key: str) -> bool:
@@ -28,7 +28,7 @@ def has_options(obj, key: str) -> bool:
 
 
 def remove_options(obj, key: str):
-    options: dict
+    options: t.Optional[dict]
     if options := getattr(obj, __MOVICI_CLI_OPTIONS__, None):
         del options[key]
 
@@ -49,8 +49,8 @@ class CLIParameters:
 class Controller:
     name: str
     reverse: bool = True
-    decorators: t.Iterable[callable] = ()
-    __commands__: t.Set[callable]
+    decorators: t.Iterable[t.Callable] = ()
+    __commands__: t.Set[str]
 
     mediator: Mediator = gimme.attribute(Mediator)
     client: Client = gimme.attribute(Client)

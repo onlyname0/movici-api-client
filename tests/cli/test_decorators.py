@@ -41,7 +41,9 @@ class TestAuthenticated:
             return 42
 
         test_func()
-        assert isinstance(client.request.call_args[0][0], CheckAuthToken)
+        assert isinstance(
+            client.request.call_args[0][0], CheckAuthToken
+        )  # type: ignore[attr-defined]
 
     def test_authenticated_passes_when_authenticated(self, client: FakeClient):
         @authenticated

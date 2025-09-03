@@ -9,7 +9,7 @@ _fixed_types = set()
 
 
 def get(tp: t.Type[T]) -> T:
-    return gimme.that(tp)
+    return gimme.that(tp)  # type: ignore[no-any-return]
 
 
 def set(obj, tp=None, fixed=False):
